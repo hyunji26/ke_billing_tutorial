@@ -1,0 +1,380 @@
+"""
+MongoDB 클라이언트 및 CRUD 함수 모듈
+"""
+
+from typing import List, Optional
+from datetime import datetime
+from pymongo import MongoClient, ASCENDING, DESCENDING
+from pymongo.collection import Collection
+from pymongo.database import Database
+from pymongo.operations import UpdateOne
+
+from config.settings import MongoSettings
+from core.aggregator import DailySummary
+
+
+def get_mongo_client(settings: MongoSettings) -> MongoClient:
+    """
+    MongoDB 클라이언트를 생성합니다.
+    
+    Args:
+        settings: MongoDB 설정 (uri, db_name)
+    
+    Returns:
+        MongoClient 인스턴스
+    """
+    return MongoClient(settings.uri)
+
+
+def get_database(client: MongoClient, db_name: str) -> Database:
+    """
+    데이터베이스를 가져옵니다.
+    
+    Args:
+        client: MongoClient 인스턴스
+        db_name: 데이터베이스 이름
+    
+    Returns:
+        Database 인스턴스
+    """
+    return client[db_name]
+
+
+def ensure_indexes(db: Database):
+    """
+    필요한 인덱스를 생성합니다.
+    
+    Args:
+        db: Database 인스턴스
+    """
+    # billing_daily 인덱스
+    db.billing_daily.create_index(
+        [
+            ("date", ASCENDING),
+            ("domainId", ASCENDING),
+            ("projectId", ASCENDING),
+            ("serviceId", ASCENDING),
+            ("pricingType", ASCENDING)
+        ],
+        unique=True,
+        name="unique_daily_summary"
+    )
+    db.billing_daily.create_index(
+        [("date", DESCENDING)],
+        name="date_desc"
+    )
+    
+    # billing_baseline 인덱스
+    db.billing_baseline.create_index(
+        [
+            ("domainId", ASCENDING),
+            ("projectId", ASCENDING),
+            ("serviceId", ASCENDING),
+            ("pricingType", ASCENDING)
+        ],
+        unique=True,
+        name="unique_baseline"
+    )
+    
+    # billing_anomalies 인덱스
+    db.billing_anomalies.create_index(
+        [("date", DESCENDING), ("hour", DESCENDING)],
+        name="date_hour_desc"
+    )
+    db.billing_anomalies.create_index(
+        [("status", ASCENDING), ("createdAt", DESCENDING)],
+        name="status_created_desc"
+    )
+    db.billing_anomalies.create_index(
+        [
+            ("domainId", ASCENDING),
+            ("projectId", ASCENDING),
+            ("serviceId", ASCENDING)
+        ],
+        name="domain_project_service"
+    )
+
+
+def upsert_daily_summary(
+    collection: Collection,
+    summary: DailySummary
+) -> None:
+    """
+    일별 집계 데이터를 MongoDB에 저장/업데이트합니다.
+    
+    Args:
+        collection: billing_daily 컬렉션
+        summary: 일별 집계 결과
+    """
+    filter_query = {
+        "date": summary.metering_date,
+        "domainId": summary.domain_id,
+        "projectId": summary.project_id,
+        "serviceId": summary.service_id,
+        "pricingType": summary.pricing_type  # L2 지원
+    }
+    
+    update_data = {
+        "$set": {
+            "date": summary.metering_date,
+            "domainId": summary.domain_id,
+            "domainName": summary.domain_name,
+            "projectId": summary.project_id,
+            "projectName": summary.project_name,
+            "serviceId": summary.service_id,
+            "serviceName": summary.service_name,
+            "pricingType": summary.pricing_type,
+            "expectAmount": summary.expect_amount,
+            "usageTime": summary.usage_time,
+            "usageSize": summary.usage_size,
+            "generalAmount": summary.general_amount,
+            "discountAmount": summary.discount_amount,
+            "pricingTypes": summary.pricing_types,
+            "regions": summary.regions,
+            "updatedAt": datetime.utcnow()
+        },
+        "$setOnInsert": {
+            "createdAt": datetime.utcnow(),
+            "isAnomaly": False  # 기본값 설정
+        }
+    }
+    
+    collection.update_one(filter_query, update_data, upsert=True)
+
+
+def bulk_upsert_daily_summaries(
+    collection: Collection,
+    summaries: List[DailySummary]
+) -> int:
+    """
+    여러 일별 집계 데이터를 bulk upsert로 효율적으로 저장합니다.
+    
+    Args:
+        collection: billing_daily 컬렉션
+        summaries: 일별 집계 결과 리스트
+    
+    Returns:
+        처리된 문서 개수
+    """
+    if not summaries:
+        return 0
+    
+    now = datetime.utcnow()
+    operations = []
+    
+    for summary in summaries:
+        filter_query = {
+            "date": summary.metering_date,
+            "domainId": summary.domain_id,
+            "projectId": summary.project_id,
+            "serviceId": summary.service_id,
+            "pricingType": summary.pricing_type
+        }
+        
+        update_data = {
+            "$set": {
+                "date": summary.metering_date,
+                "domainId": summary.domain_id,
+                "domainName": summary.domain_name,
+                "projectId": summary.project_id,
+                "projectName": summary.project_name,
+                "serviceId": summary.service_id,
+                "serviceName": summary.service_name,
+                "pricingType": summary.pricing_type,
+                "expectAmount": summary.expect_amount,
+                "usageTime": summary.usage_time,
+                "usageSize": summary.usage_size,
+                "generalAmount": summary.general_amount,
+                "discountAmount": summary.discount_amount,
+                "pricingTypes": summary.pricing_types,
+                "regions": summary.regions,
+                "updatedAt": now
+            },
+            "$setOnInsert": {
+                "createdAt": now,
+                "isAnomaly": False  # 기본값 설정
+            }
+        }
+        
+        operations.append(
+            UpdateOne(
+                filter_query,
+                update_data,
+                upsert=True
+            )
+        )
+    
+    if operations:
+        result = collection.bulk_write(operations, ordered=False)
+        return result.upserted_count + result.modified_count
+    
+    return 0
+
+
+def get_all_daily_for_service(
+    collection: Collection,
+    domain_id: str,
+    project_id: str,
+    service_id: str,
+    pricing_type: Optional[str] = None
+) -> List[dict]:
+    """
+    특정 서비스(및 pricing_type)의 모든 일별 데이터를 조회합니다.
+    
+    Args:
+        collection: billing_daily 컬렉션
+        domain_id: 도메인 ID
+        project_id: 프로젝트 ID
+        service_id: 서비스 ID
+        pricing_type: Pricing Type (None이면 L1 데이터 조회)
+    
+    Returns:
+        일별 데이터 리스트
+    """
+    query = {
+        "domainId": domain_id,
+        "projectId": project_id,
+        "serviceId": service_id,
+        "pricingType": pricing_type,
+        "isAnomaly": {"$ne": True}  # 이상치로 마킹된 데이터는 제외
+    }
+    
+    collection.update_one(filter_query, update_data, upsert=True)
+
+
+def update_daily_anomaly_status(
+    collection: Collection,
+    date: str,
+    domain_id: str,
+    project_id: str,
+    service_id: str,
+    is_anomaly: bool
+) -> None:
+    """
+    일별 데이터의 이상치 상태를 업데이트합니다.
+    
+    Args:
+        collection: billing_daily 컬렉션
+        date: 날짜 (YYYYMMDD)
+        domain_id: 도메인 ID
+        project_id: 프로젝트 ID
+        service_id: 서비스 ID
+        is_anomaly: 이상치 여부
+    """
+    filter_query = {
+        "date": date,
+        "domainId": domain_id,
+        "projectId": project_id,
+        "serviceId": service_id,
+        "pricingType": None  # L1 데이터만 대상
+    }
+    
+    update_data = {
+        "$set": {
+            "isAnomaly": is_anomaly,
+            "updatedAt": datetime.utcnow()
+        },
+        "$setOnInsert": {
+            "createdAt": datetime.utcnow()
+        }
+    }
+    
+    collection.update_one(filter_query, update_data, upsert=True)
+
+
+
+def insert_anomaly(
+    collection: Collection,
+    anomaly_data: dict
+) -> None:
+    """
+    이상치 데이터를 MongoDB에 저장합니다.
+    
+    Args:
+        collection: billing_anomalies 컬렉션
+        anomaly_data: 이상치 데이터 (dict)
+    """
+    anomaly_data["createdAt"] = datetime.utcnow()
+    if "status" not in anomaly_data:
+        anomaly_data["status"] = "NEW"
+    
+    collection.insert_one(anomaly_data)
+
+
+def upsert_baseline(
+    collection: Collection,
+    domain_id: str,
+    project_id: str,
+    service_id: str,
+    service_name: str,
+    statistics: dict,
+    pricing_type: Optional[str] = None,
+    pricing_types: Optional[List[str]] = None
+) -> None:
+    """
+    Baseline 통계를 MongoDB에 저장/업데이트합니다.
+    
+    Args:
+        collection: billing_baseline 컬렉션
+        domain_id: 도메인 ID
+        project_id: 프로젝트 ID
+        service_id: 서비스 ID
+        service_name: 서비스 이름
+        statistics: 통계 데이터
+        pricing_type: Pricing Type (L2 집계 키)
+        pricing_types: 포함된 Pricing Type 목록 (메타데이터)
+    """
+    filter_query = {
+        "domainId": domain_id,
+        "projectId": project_id,
+        "serviceId": service_id,
+        "pricingType": pricing_type
+    }
+    
+    update_data = {
+        "$set": {
+            "domainId": domain_id,
+            "projectId": project_id,
+            "serviceId": service_id,
+            "serviceName": service_name,
+            "pricingType": pricing_type,
+            "statistics": statistics,
+            "lastUpdated": datetime.utcnow()
+        },
+        "$setOnInsert": {
+            "createdAt": datetime.utcnow()
+        }
+    }
+
+    if pricing_types is not None:
+        update_data["$set"]["pricingTypes"] = pricing_types
+    
+    collection.update_one(filter_query, update_data, upsert=True)
+
+
+def get_baseline(
+    collection: Collection,
+    domain_id: str,
+    project_id: str,
+    service_id: str,
+    pricing_type: Optional[str] = None
+) -> Optional[dict]:
+    """
+    Baseline 통계를 조회합니다.
+    
+    Args:
+        collection: billing_baseline 컬렉션
+        domain_id: 도메인 ID
+        project_id: 프로젝트 ID
+        service_id: 서비스 ID
+        pricing_type: Pricing Type
+    
+    Returns:
+        Baseline 문서 (없으면 None)
+    """
+    return collection.find_one({
+        "domainId": domain_id,
+        "projectId": project_id,
+        "serviceId": service_id,
+        "pricingType": pricing_type
+    })
