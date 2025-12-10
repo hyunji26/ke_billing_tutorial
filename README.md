@@ -138,15 +138,10 @@ Kakao Cloud Billing API를 활용한 비용 데이터 수집, 집계, 이상치 
 pip install -r requirements.txt
 ```
 
-### 3. 설정 파일 생성
+### 3. 설정 파일 작성
 
-```bash
-cp config/settings_example.yaml config/settings.yaml
-```
-
-### 4. 설정 파일 작성
-
-`config/settings.yaml` 파일을 열어 다음 정보를 입력합니다:
+레포지토리에는 기본 템플릿인 `config/settings.yaml` 이 이미 포함되어 있습니다.  
+이 파일을 열어 아래 항목들을 실제 환경에 맞게 수정합니다:
 
 ```yaml
 billingApi:

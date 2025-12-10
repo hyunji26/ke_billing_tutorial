@@ -456,9 +456,8 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
-# 7. 설정 파일 생성
-cp config/settings_example.yaml config/settings.yaml
-# settings.yaml 편집 (Secrets Manager 또는 환경 변수 사용)
+# 7. 설정 파일 편집 (Secrets Manager 또는 환경 변수 사용)
+#   - config/settings.yaml 파일을 열어 Billing API, Mongo, Object Storage 정보를 실제 값으로 수정
 
 # 8. Cron 설정
 ./scripts/setup_cron.sh add

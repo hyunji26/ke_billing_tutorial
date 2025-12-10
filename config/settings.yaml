@@ -3,14 +3,13 @@ billingApi:
   credentialSecret: "YOUR_BILLING_API_SECRET"
 
 mongo:
-  uri: "mongodb://user:password@host:27017/billing"
+  uri: "mongodb://<MONGO_VM_INTERNAL_IP>:27017/billing"
   dbName: "billing"
 
 objectStorage:
-  endpoint: "https://object-storage.kakaocloud.com"
+  endpoint: "https://objectstorage.kr-central-2.kakaocloud.com"
   bucket: "your-billing-raw-bucket"
   accessKey: "YOUR_ACCESS_KEY"
   secretKey: "YOUR_SECRET_KEY"
 
-alert:
-  slackWebhookUrl: ""  # Slack Webhook URL (없으면 빈 문자열)
+

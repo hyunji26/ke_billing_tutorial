@@ -148,11 +148,11 @@ def run_hourly_job(settings: Settings, target_date: str = None):
             daily_col = db.billing_daily
             
             for anomaly in anomalies:
-                # MongoDB 저장 (이상치 이력)
+                #1) MongoDB 저장 (이상치 이력)
                 anomaly_dict = anomaly_to_dict(anomaly)
                 insert_anomaly(anomalies_col, anomaly_dict)
                 
-                # 일별 집계 테이블에 이상치 마킹 (Daily Job Baseline 제외용)
+                #2) 일별 집계 테이블에 이상치 마킹 (Daily Job Baseline 제외용)
                 update_daily_anomaly_status(
                     collection=daily_col,
                     date=anomaly.date,
@@ -162,7 +162,7 @@ def run_hourly_job(settings: Settings, target_date: str = None):
                     is_anomaly=True
                 )
                 
-                # syslog에 이상치 로그 기록 (Alert Center 연동용)
+                #3) syslog에 이상치 로그 기록 (Alert Center 연동용)
                 # 예시 형식:
                 # [BILLING_ANOMALY] date=20251208 hour=10 domainId=... projectId=... serviceId=...
                 log_message = (

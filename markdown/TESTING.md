@@ -57,8 +57,8 @@ pip install -r requirements.txt
 ### 2. 테스트용 설정 파일 생성
 
 ```bash
-# 테스트용 설정 파일 생성
-cp config/settings_example.yaml config/settings.test.yaml
+# 테스트용 설정 파일 생성 (운영 설정을 복사 후 테스트용으로 수정)
+cp config/settings.yaml config/settings.test.yaml
 ```
 
 `config/settings.test.yaml`을 테스트 환경에 맞게 수정:
