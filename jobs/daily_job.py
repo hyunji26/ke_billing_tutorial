@@ -8,6 +8,7 @@ import argparse
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Set, Tuple
+from zoneinfo import ZoneInfo
 
 # 프로젝트 루트 경로 추가
 project_root = Path(__file__).parent.parent
@@ -25,10 +26,12 @@ from infra.mongo_client import (
 )
 from infra.object_storage import upload_json_with_metadata
 
+KST = ZoneInfo("Asia/Seoul")
+
 
 def get_target_date(offset_days: int = -1) -> str:
     """
-    처리할 대상 날짜를 반환합니다.
+    처리할 대상 날짜를 반환합니다. (기준: KST)
     
     Args:
         offset_days: 오늘 기준으로 며칠 전인지 (기본값: -1, 즉 어제)
@@ -36,7 +39,7 @@ def get_target_date(offset_days: int = -1) -> str:
     Returns:
         날짜 문자열 (YYYYMMDD 형식)
     """
-    target = datetime.now() + timedelta(days=offset_days)
+    target = datetime.now(KST) + timedelta(days=offset_days)
     return target.strftime("%Y%m%d")
 
 

@@ -7,6 +7,7 @@ import sys
 import argparse
 from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 # 프로젝트 루트 경로 추가
 project_root = Path(__file__).parent.parent
@@ -27,14 +28,17 @@ from infra.mongo_client import (
 )
 
 
+KST = ZoneInfo("Asia/Seoul")
+
+
 def get_current_target_date() -> str:
     """
-    현재 시간 기준으로 처리할 날짜를 반환합니다.
+    현재 (KST) 시간 기준으로 처리할 날짜를 반환합니다.
     
     Returns:
         날짜 문자열 (YYYYMMDD 형식)
     """
-    now = datetime.now()
+    now = datetime.now(KST)
     return now.strftime("%Y%m%d")
 
 
@@ -86,7 +90,7 @@ def run_hourly_job(settings: Settings, target_date: str = None):
     if target_date is None:
         target_date = get_current_target_date()
     
-    now = datetime.now()
+    now = datetime.now(KST)
     current_hour = now.hour
     logger = get_logger()
     

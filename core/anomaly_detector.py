@@ -113,18 +113,30 @@ def detect_anomalies(
         # progress를 곱해 현재 시각까지의 기대 누적값으로 보정한다.
         expected_mean = baseline.mean * progress
         expected_std = baseline.std * progress
+
+        # 1) 하락 방향(관측값 < 기대값)은 이상치에서 제외
+        #    "비용이 급증한 경우"만 이상치로 보려는 정책.
+        if observed < expected_mean:
+            continue
         
         # Z-score 계산
         z_score = calculate_z_score(observed, expected_mean, expected_std)
         
         # Deviation ratio 계산
         deviation_ratio = calculate_deviation_ratio(observed, expected_mean)
-        
-        # 이상치 판단: Z-score 또는 deviation ratio가 임계값 초과
-        is_anomaly = (
-            abs(z_score) >= z_threshold or
-            deviation_ratio >= ratio_threshold
-        )
+
+        # 2) std=0 인 baseline 은 z-score 대신 ratio 기준만 사용
+        #    표준편차가 전혀 없다는 것은 과거 값이 거의 고정이었다는 뜻이므로,
+        #    사소한 변화까지 모두 z-score 무한대로 보는 대신,
+        #    "의미 있는 증가(ratio 임계치 초과)"만 이상치로 취급한다.
+        if baseline.std == 0.0:
+            is_anomaly = deviation_ratio >= ratio_threshold
+        else:
+            # 상승 방향만 보므로 z_score는 양수만 체크
+            is_anomaly = (
+                z_score >= z_threshold or
+                deviation_ratio >= ratio_threshold
+            )
         
         if is_anomaly:
             anomalies.append(AnomalyRecord(
