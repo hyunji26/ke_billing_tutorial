@@ -100,8 +100,6 @@ objectStorage:
 Job VM에서:
 
 ```bash
-cd /opt/billing_tutorial
-source venv/bin/activate
 
 # 오늘 날짜로 실행 (Billing API에 오늘 데이터가 있어야 함)
 python jobs/hourly_job.py --config config/settings.yaml
