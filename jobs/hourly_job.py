@@ -167,20 +167,15 @@ def run_hourly_job(settings: Settings, target_date: str = None):
                 )
                 
                 #3) syslog에 이상치 로그 기록 (Alert Center 연동용)
-                # 예시 형식:
-                # [BILLING_ANOMALY] date=20251208 hour=10 domainId=... projectId=... serviceId=...
+                # 고객에게 바로 보여줄 수 있도록, 자연어 한 문장 형태로 기록합니다.
+                # 예)
+                # [BILLING_ANOMALY] {domainName}/{projectName} 프로젝트의 {serviceName} 비용이 평소보다 높습니다. 현재 {amount}원, 기준 평균 {baselineMean}원.
                 log_message = (
                     f"[BILLING_ANOMALY] "
-                    f"date={anomaly.date} "
-                    f"hour={anomaly.hour:02d} "
-                    f"domainId={anomaly.domain_id} "
-                    f"projectId={anomaly.project_id} "
-                    f"serviceId={anomaly.service_id} "
-                    f"serviceName={anomaly.service_name} "
-                    f"observed={anomaly.observed_amount:.2f} "
-                    f"baselineMean={anomaly.baseline_mean:.2f} "
-                    f"zScore={anomaly.z_score:.2f} "
-                    f"ratio={anomaly.deviation_ratio:.2f}"
+                    f"{anomaly.domain_name}/{anomaly.project_name} 프로젝트의 "
+                    f"{anomaly.service_name} 비용이 평소보다 높습니다. "
+                    f"현재 {anomaly.observed_amount:.2f}원, "
+                    f"기준 평균 {anomaly.baseline_mean:.2f}원."
                 )
                 logger.error(log_message)
             
