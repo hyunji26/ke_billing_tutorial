@@ -237,13 +237,18 @@ def get_all_daily_for_service(
     Returns:
         일별 데이터 리스트
     """
+    # 기본적으로는 해당 서비스의 L1/L2 일별 데이터 전체를 대상으로 하되,
+    # 이상치로 마킹된(isAnomaly=True) 데이터는 baseline 계산에서 제외합니다.
     query = {
         "domainId": domain_id,
         "projectId": project_id,
         "serviceId": service_id,
-        "pricingType": pricing_type,
-        "isAnomaly": {"$ne": True}  # 이상치로 마킹된 데이터는 제외
+        "isAnomaly": {"$ne": True}
     }
+
+    # 특정 pricing_type 으로 L2만 보고 싶을 때만 pricingType 필터를 추가
+    if pricing_type is not None:
+        query["pricingType"] = pricing_type
 
     # billing_daily 에서 조건에 맞는 모든 문서를 날짜 기준 오름차순으로 조회
     cursor = collection.find(query).sort("date", ASCENDING)
