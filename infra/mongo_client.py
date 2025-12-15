@@ -101,17 +101,20 @@ def upsert_daily_summary(
 ) -> None:
     """
     일별 집계 데이터를 MongoDB에 저장/업데이트합니다.
+    현재 구현에서는 L1 집계(하루/서비스 단위)만 사용하므로
+    pricingType 필드는 항상 None 으로 저장합니다.
     
     Args:
         collection: billing_daily 컬렉션
         summary: 일별 집계 결과
     """
+    # L1 집계: pricingType 은 사용하지 않고 None 으로 고정
     filter_query = {
         "date": summary.metering_date,
         "domainId": summary.domain_id,
         "projectId": summary.project_id,
         "serviceId": summary.service_id,
-        "pricingType": summary.pricing_type  # L2 지원
+        "pricingType": None
     }
     
     update_data = {
@@ -123,7 +126,8 @@ def upsert_daily_summary(
             "projectName": summary.project_name,
             "serviceId": summary.service_id,
             "serviceName": summary.service_name,
-            "pricingType": summary.pricing_type,
+            # L1 집계만 사용하므로 pricingType 은 None
+            "pricingType": None,
             "expectAmount": summary.expect_amount,
             "usageTime": summary.usage_time,
             "usageSize": summary.usage_size,
@@ -163,12 +167,13 @@ def bulk_upsert_daily_summaries(
     operations = []
     
     for summary in summaries:
+        # L1 집계: pricingType 은 사용하지 않고 None 으로 고정
         filter_query = {
             "date": summary.metering_date,
             "domainId": summary.domain_id,
             "projectId": summary.project_id,
             "serviceId": summary.service_id,
-            "pricingType": summary.pricing_type
+            "pricingType": None
         }
         
         update_data = {
@@ -180,7 +185,8 @@ def bulk_upsert_daily_summaries(
                 "projectName": summary.project_name,
                 "serviceId": summary.service_id,
                 "serviceName": summary.service_name,
-                "pricingType": summary.pricing_type,
+                # L1 집계만 사용하므로 pricingType 은 None
+                "pricingType": None,
                 "expectAmount": summary.expect_amount,
                 "usageTime": summary.usage_time,
                 "usageSize": summary.usage_size,
@@ -238,8 +244,10 @@ def get_all_daily_for_service(
         "pricingType": pricing_type,
         "isAnomaly": {"$ne": True}  # 이상치로 마킹된 데이터는 제외
     }
-    
-    collection.update_one(filter_query, update_data, upsert=True)
+
+    # billing_daily 에서 조건에 맞는 모든 문서를 날짜 기준 오름차순으로 조회
+    cursor = collection.find(query).sort("date", ASCENDING)
+    return list(cursor)
 
 
 def update_daily_anomaly_status(
