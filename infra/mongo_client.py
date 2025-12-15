@@ -5,6 +5,7 @@ MongoDB 클라이언트 및 CRUD 함수 모듈
 from typing import List, Optional
 from datetime import datetime
 from pymongo import MongoClient, ASCENDING, DESCENDING
+from pymongo.errors import OperationFailure
 from pymongo.collection import Collection
 from pymongo.database import Database
 from pymongo.operations import UpdateOne
@@ -81,6 +82,24 @@ def ensure_indexes(db: Database):
         [("date", DESCENDING), ("hour", DESCENDING)],
         name="date_hour_desc"
     )
+    # 동일 시간대 동일 서비스의 이상치가 반복 저장되지 않도록 유니크 키를 둡니다.
+    # 이미 중복 데이터가 존재하면 unique index 생성이 실패할 수 있으므로, 잡이 죽지 않도록 보호합니다.
+    try:
+        db.billing_anomalies.create_index(
+            [
+                ("date", ASCENDING),
+                ("hour", ASCENDING),
+                ("domainId", ASCENDING),
+                ("projectId", ASCENDING),
+                ("serviceId", ASCENDING),
+            ],
+            unique=True,
+            name="unique_anomaly_key"
+        )
+    except OperationFailure:
+        # 기존 중복 데이터가 있는 경우 등: 인덱스 생성 실패 시에도 서비스 동작은 계속되게 둔다.
+        # (이후 insert_anomaly가 upsert이므로 신규 중복은 줄어든다)
+        pass
     db.billing_anomalies.create_index(
         [("status", ASCENDING), ("createdAt", DESCENDING)],
         name="status_created_desc"
@@ -307,11 +326,27 @@ def insert_anomaly(
         collection: billing_anomalies 컬렉션
         anomaly_data: 이상치 데이터 (dict)
     """
-    anomaly_data["createdAt"] = datetime.utcnow()
+    # 동일 시간대 동일 서비스의 이상치가 여러 번(재실행/재시도) 저장되는 것을 방지하기 위해 upsert로 저장합니다.
+    # 키: (date, hour, domainId, projectId, serviceId)
+    filter_query = {
+        "date": anomaly_data.get("date"),
+        "hour": anomaly_data.get("hour"),
+        "domainId": anomaly_data.get("domainId"),
+        "projectId": anomaly_data.get("projectId"),
+        "serviceId": anomaly_data.get("serviceId"),
+    }
+
+    now = datetime.utcnow()
     if "status" not in anomaly_data:
         anomaly_data["status"] = "NEW"
-    
-    collection.insert_one(anomaly_data)
+
+    # createdAt은 최초 insert 시에만, updatedAt은 매번 갱신
+    update_doc = {
+        "$set": {**anomaly_data, "updatedAt": now},
+        "$setOnInsert": {"createdAt": now},
+    }
+
+    collection.update_one(filter_query, update_doc, upsert=True)
 
 
 def upsert_baseline(

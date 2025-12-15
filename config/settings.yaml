@@ -1,15 +1,15 @@
 billingApi:
-  credentialId: "323000f2e2154f10b17d7969a4c41c7d"
-  credentialSecret: "cd648a640a7b844b9df227ac146f7522ba8eb45c8cf754ebd153a48048d18e99cc85af"
+  credentialId: "{BILLING_API_CREDENTIAL_ID}"
+  credentialSecret: "{BILLING_API_CREDENTIAL_SECRET}"
 
 mongo:
-  uri: "mongodb://172.16.214.250:27017/billing"
+  uri: "mongodb://{MONGODB_PRIVATE_IP}:27017/billing"
   dbName: "billing"
 
 objectStorage:
   endpoint: "https://objectstorage.kr-central-2.kakaocloud.com"
-  bucket: "ella-bucket"
-  accessKey: "a2fb97a00fec4496ab918003584ca1ca"
-  secretKey: "9780ba77864f46a28f3ecc8546dd54c0"
+  bucket: "{OBJECT_STORAGE_BUCKET_NAME}"
+  accessKey: "{OBJECT_STORAGE_ACCESS_KEY}"
+  secretKey: "{OBJECT_STORAGE_SECRET_KEY}"
 
 
