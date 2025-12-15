@@ -8,9 +8,25 @@
 
 import logging
 from logging.handlers import SysLogHandler
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 
 LOGGER_NAME = "billing_alert"
+
+
+class KSTFormatter(logging.Formatter):
+    """
+    로깅 시간을 KST(Asia/Seoul) 기준으로 출력하는 Formatter.
+    """
+
+    def formatTime(self, record, datefmt=None):
+        # record.created (epoch seconds)를 KST로 변환
+        dt = datetime.fromtimestamp(record.created, ZoneInfo("Asia/Seoul"))
+        if datefmt:
+            return dt.strftime(datefmt)
+        # 기본 포맷과 비슷하게: YYYY-MM-DD HH:MM:SS,mmm
+        return dt.strftime("%Y-%m-%d %H:%M:%S,%f")[:-3]
 
 
 def get_logger(name: str = LOGGER_NAME) -> logging.Logger:
@@ -28,9 +44,9 @@ def get_logger(name: str = LOGGER_NAME) -> logging.Logger:
 
     logger.setLevel(logging.INFO)
 
-    formatter = logging.Formatter(
-        "[%(levelname)s] %(asctime)s %(name)s %(message)s"
-    )
+    # Alert Center에서 사용하기 위해, 최종 로그 라인은 message 본문만 남기도록 설정
+    # (예: "[BILLING_ANOMALY] {domain}/{project} 프로젝트의 {service} 비용이 ...")
+    formatter = KSTFormatter("%(message)s")
 
     # Syslog 핸들러 설정 (/dev/log는 대부분의 Linux 배포판에서 syslog 소켓)
     try:
