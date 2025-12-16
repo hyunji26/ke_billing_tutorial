@@ -114,6 +114,7 @@ def ensure_indexes(db: Database):
     )
 
 
+
 def upsert_daily_summary(
     collection: Collection,
     summary: DailySummary

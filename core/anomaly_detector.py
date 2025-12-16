@@ -9,7 +9,6 @@ from typing import List, Dict, Any, Optional
 from core.aggregator import DailySummary
 from core.baseline import Baseline
 
-
 @dataclass
 class AnomalyRecord:
     """이상치 기록"""
@@ -87,6 +86,10 @@ def detect_anomalies(
         이상치 리스트
     """
     anomalies = []
+    # 운영 정책:
+    # - baseline 표본이 충분하지 않으면(20 미만) 탐지하지 않음 (학습중)
+    # - mean==0, std==0 인 서비스는 탐지/저장/마킹 자체를 하지 않음 (집계만 수행)
+    MIN_SAMPLECOUNT_FOR_DETECTION = 20
     
     # 현재 시각 기준 진행률(하루 24시간 기준)
     # 예) 0시 -> 1/24, 11시 -> 12/24, 23시 -> 24/24 = 1.0
@@ -102,58 +105,37 @@ def detect_anomalies(
         
         baseline = baseline_map.get(baseline_key)
         
-        # Baseline이 없거나 샘플이 부족하면 스킵
-        if not baseline or baseline.sample_count < 5:
+        # Baseline이 없거나 샘플이 부족하면 스킵 (학습중)
+        if not baseline or baseline.sample_count < MIN_SAMPLECOUNT_FOR_DETECTION:
+            continue
+        # mean==0 / std==0 은 탐지 제외 (집계만)
+        if baseline.mean == 0.0 or baseline.std == 0.0:
             continue
 
         observed = summary.expect_amount
 
-        # 두 가지 분기:
-        # 1) std=0 이고 sample_count가 충분히 큰 "완전 고정형" 요금
-        #    - DNS, 정액 Direct Connect 등: 하루 총액이 항상 동일
-        #    - 이런 경우에는 시간(progress)로 나누지 않고
-        #      "하루 전체 기준"으로만 증가 여부를 판단한다.
-        # 2) 그 외 대부분 서비스(VM, Storage 등)
-        #    - 진행률(progress)을 곱해 현재 시점까지의 기대 누적값으로 보정한다.
-        if baseline.std == 0.0 and baseline.sample_count >= 20:
-            # (1) 완전 고정형 요금: 하루 총합 기준 비교
-            expected_mean = baseline.mean
-            expected_std = 0.0
+        # 일반 요금: 진행률(progress)을 곱해 현재 시점 기대 누적값 계산
+        # Baseline(mean, std)은 "하루 총합" 기준이므로,
+        # progress를 곱해 현재 시각까지의 기대 누적값으로 보정한다.
+        expected_mean = baseline.mean * progress
+        expected_std = baseline.std * progress
 
-            # Deviation ratio: 오늘 누적 / 하루 평균 총액
-            deviation_ratio = calculate_deviation_ratio(observed, expected_mean)
-            # std=0 이므로 z-score는 참고용으로만 계산
-            z_score = calculate_z_score(observed, expected_mean, expected_std)
+        # 하락 방향(관측값 < 기대값)은 이상치에서 제외
+        # "비용이 급증한 경우"만 이상치로 보려는 정책.
+        if observed < expected_mean:
+            continue
 
-            # 증가 방향만 관심: ratio 임계치 초과일 때만 이상치
-            is_anomaly = deviation_ratio >= ratio_threshold
-        else:
-            # (2) 일반 요금: 진행률을 곱해 현재 시점 기대 누적값 계산
-            # Baseline(mean, std)은 "하루 총합" 기준이므로,
-            # progress를 곱해 현재 시각까지의 기대 누적값으로 보정한다.
-            expected_mean = baseline.mean * progress
-            expected_std = baseline.std * progress
+        # Z-score 계산
+        z_score = calculate_z_score(observed, expected_mean, expected_std)
+        
+        # Deviation ratio 계산
+        deviation_ratio = calculate_deviation_ratio(observed, expected_mean)
 
-            # 하락 방향(관측값 < 기대값)은 이상치에서 제외
-            # "비용이 급증한 경우"만 이상치로 보려는 정책.
-            if observed < expected_mean:
-                continue
-
-            # Z-score 계산
-            z_score = calculate_z_score(observed, expected_mean, expected_std)
-            
-            # Deviation ratio 계산
-            deviation_ratio = calculate_deviation_ratio(observed, expected_mean)
-
-            # std=0 인 경우에는 여전히 ratio 기준만 사용 (데이터가 적어서 0인 케이스 포함)
-            if baseline.std == 0.0:
-                is_anomaly = deviation_ratio >= ratio_threshold
-            else:
-                # 상승 방향만 보므로 z_score는 양수만 체크
-                is_anomaly = (
-                    z_score >= z_threshold or
-                    deviation_ratio >= ratio_threshold
-                )
+        # 상승 방향만 보므로 z_score는 양수만 체크
+        is_anomaly = (
+            z_score >= z_threshold or
+            deviation_ratio >= ratio_threshold
+        )
         
         if is_anomaly:
             anomalies.append(AnomalyRecord(
