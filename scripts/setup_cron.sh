@@ -71,7 +71,12 @@ add_cron() {
     if cron_exists "$cron_entry"; then
         echo -e "${YELLOW}⚠️  $job_name cron 항목이 이미 존재합니다.${NC}"
     else
-        (crontab -l 2>/dev/null; echo "$cron_entry") | crontab -
+        # NOTE:
+        # - set -e 환경에서 `crontab -l`은 "no crontab for user"일 때 exit 1을 반환합니다.
+        # - 이 상태로 `(crontab -l; echo ...) | crontab -` 를 실행하면 subshell이 중간에 종료되어
+        #   echo가 실행되지 않고, 결과적으로 빈 crontab이 설치될 수 있습니다.
+        # - 따라서 `crontab -l` 실패를 무시하고 기존 항목이 없으면 빈 상태에서 추가되도록 합니다.
+        (crontab -l 2>/dev/null || true; echo "$cron_entry") | crontab -
         echo -e "${GREEN}✅ $job_name cron 항목이 추가되었습니다.${NC}"
     fi
 }
