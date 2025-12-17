@@ -121,7 +121,8 @@ Kakao Cloud Billing API를 활용한 비용 데이터 수집, 집계, 이상치 
   - 임계값: 3.0 (3시그마 규칙)
 - **Deviation Ratio**: `관측값 / 평균`
   - 임계값: 2.0 (평균의 2배 이상)
-- **조건**: Z-score 또는 Deviation Ratio 중 하나라도 임계값 초과 시 이상치로 판단
+- **조건**: Z-score 또는 Deviation Ratio 중 하나라도 임계값 초과 시 이상치로 판단  
+  - 단, **`std==0`인 경우** Z-score는 사용하지 않고 `Ratio >= 2.0` 조건으로만 판단
 
 ## 📦 설치 및 설정
 

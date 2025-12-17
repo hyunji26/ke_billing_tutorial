@@ -88,12 +88,8 @@ def detect_anomalies(
     anomalies = []
     # 운영 정책:
     # - baseline 표본이 충분하지 않으면(20 미만) 탐지하지 않음 (학습중)
-    # - mean==0, std==0 인 서비스는 탐지/저장/마킹 자체를 하지 않음 (집계만 수행)
+    # - mean==0 인 서비스는 탐지/저장/마킹 자체를 하지 않음 (집계만 수행)
     MIN_SAMPLECOUNT_FOR_DETECTION = 20
-    
-    # 현재 시각 기준 진행률(하루 24시간 기준)
-    # 예) 0시 -> 1/24, 11시 -> 12/24, 23시 -> 24/24 = 1.0
-    progress = (current_hour + 1) / 24.0
     
     for summary in summaries:
         # Baseline 키 생성
@@ -108,17 +104,19 @@ def detect_anomalies(
         # Baseline이 없거나 샘플이 부족하면 스킵 (학습중)
         if not baseline or baseline.sample_count < MIN_SAMPLECOUNT_FOR_DETECTION:
             continue
-        # mean==0 / std==0 은 탐지 제외 (집계만)
-        if baseline.mean == 0.0 or baseline.std == 0.0:
+        # mean==0 은 탐지 제외 (집계만)
+        # (mean==0이면 ratio 계산이 의미가 없거나 inf가 될 수 있으므로 스킵)
+        if baseline.mean == 0.0:
             continue
 
         observed = summary.expect_amount
 
-        # 일반 요금: 진행률(progress)을 곱해 현재 시점 기대 누적값 계산
-        # Baseline(mean, std)은 "하루 총합" 기준이므로,
-        # progress를 곱해 현재 시각까지의 기대 누적값으로 보정한다.
-        expected_mean = baseline.mean * progress
-        expected_std = baseline.std * progress
+        # 2번(시간 보정 제거):
+        # observed는 "오늘 0시~현재시각까지 누적"이고,
+        # baseline(mean/std)은 "하루 총합" 기준이지만 여기서는 별도 시간 보정을 하지 않고
+        # 하루 평균/표준편차를 그대로 기대값으로 사용한다.
+        expected_mean = baseline.mean
+        expected_std = baseline.std
 
         # 하락 방향(관측값 < 기대값)은 이상치에서 제외
         # "비용이 급증한 경우"만 이상치로 보려는 정책.
@@ -131,11 +129,17 @@ def detect_anomalies(
         # Deviation ratio 계산
         deviation_ratio = calculate_deviation_ratio(observed, expected_mean)
 
-        # 상승 방향만 보므로 z_score는 양수만 체크
-        is_anomaly = (
-            z_score >= z_threshold or
-            deviation_ratio >= ratio_threshold
-        )
+        # std==0 인 경우:
+        # - Z-score는 분모가 0이라 의미가 없거나 inf가 나와 오탐이 날 수 있으므로
+        # - ratio 기준으로만 판단한다.
+        if expected_std == 0.0:
+            is_anomaly = deviation_ratio >= ratio_threshold
+        else:
+            # 상승 방향만 보므로 z_score는 양수만 체크
+            is_anomaly = (
+                z_score >= z_threshold or
+                deviation_ratio >= ratio_threshold
+            )
         
         if is_anomaly:
             anomalies.append(AnomalyRecord(

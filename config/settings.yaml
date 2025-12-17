@@ -11,5 +11,3 @@ objectStorage:
   bucket: "{OBJECT_STORAGE_BUCKET_NAME}"
   accessKey: "{OBJECT_STORAGE_ACCESS_KEY}"
   secretKey: "{OBJECT_STORAGE_SECRET_KEY}"
-
-
