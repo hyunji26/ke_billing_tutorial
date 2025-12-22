@@ -9,6 +9,7 @@ from typing import List, Dict, Any, Optional
 from core.aggregator import DailySummary
 from core.baseline import Baseline
 
+
 @dataclass
 class AnomalyRecord:
     """이상치 기록"""

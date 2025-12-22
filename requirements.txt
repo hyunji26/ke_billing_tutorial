@@ -1,4 +1,7 @@
 requests>=2.31.0
+# urllib3 버전 분기:
+urllib3<1.27; python_version < "3.10"
+urllib3>=2; python_version >= "3.10"
 pyyaml>=6.0
 pymongo>=4.6.0
 boto3>=1.34.0

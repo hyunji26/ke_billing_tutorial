@@ -18,6 +18,7 @@ from config.settings import load_settings, Settings
 from core.billing_client import fetch_billing
 from core.aggregator import extract_entries, aggregate_daily
 from core.baseline import recompute_baseline
+from core.logger import get_logger
 from infra.mongo_client import (
     get_mongo_client,
     get_database,
@@ -27,6 +28,7 @@ from infra.mongo_client import (
 from infra.object_storage import upload_json_with_metadata
 
 KST = ZoneInfo("Asia/Seoul")
+BILLING_DAILY_TOTAL = "BILLING_DAILY_TOTAL"
 
 
 def get_target_date(offset_days: int = -1) -> str:
@@ -41,6 +43,14 @@ def get_target_date(offset_days: int = -1) -> str:
     """
     target = datetime.now(KST) + timedelta(days=offset_days)
     return target.strftime("%Y%m%d")
+
+def format_yyyymmdd(date_str: str) -> str:
+    """
+    YYYYMMDD -> YYYY-MM-DD 포맷으로 변환합니다.
+    """
+    if not date_str or len(date_str) != 8:
+        return date_str
+    return f"{date_str[0:4]}-{date_str[4:6]}-{date_str[6:8]}"
 
 
 def extract_unique_services(summaries) -> Set[Tuple[str, str, str, str]]:
@@ -74,6 +84,8 @@ def run_daily_job(settings: Settings, target_date: str = None):
     """
     if target_date is None:
         target_date = get_target_date(offset_days=-1)  # 어제 날짜
+
+    logger = get_logger()
     
     print("=" * 60)
     print(f"📅 Daily Job 실행 - {target_date}")
@@ -147,6 +159,17 @@ def run_daily_job(settings: Settings, target_date: str = None):
             baseline_updated += 1
         
         print(f"✅ {baseline_updated}개 서비스 Baseline 업데이트 완료")
+
+        # 6. Alert Center 연동용: 일별 총 요금 로그 기록 (키워드 기반)
+        # - Alert Center에서 Syslog(/var/log/syslog) 수집 + 키워드 필터로 알림을 만들 수 있습니다.
+        total_expect_amount = sum(s.expect_amount for s in summaries)
+        date_label = format_yyyymmdd(target_date)
+        log_message = (
+            f"[{BILLING_DAILY_TOTAL}] "
+            f"[{date_label}]의 총 요금은 {total_expect_amount:,.2f}원 입니다."
+        )
+        logger.info(log_message)
+        print("✅ 일별 총 요금 로그 전송 완료 (Alert Center 연동용)")
         
         print("\n" + "=" * 60)
         print("✅ Daily Job 완료!")
