@@ -8,7 +8,12 @@ import argparse
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Set, Tuple
-from zoneinfo import ZoneInfo
+try:
+    # Python 3.9+
+    from zoneinfo import ZoneInfo
+except ImportError:  # pragma: no cover
+    # Python 3.8 (e.g., Ubuntu 20.04 기본 python3)
+    from backports.zoneinfo import ZoneInfo
 
 # 프로젝트 루트 경로 추가
 project_root = Path(__file__).parent.parent

@@ -58,7 +58,7 @@ pip install -r requirements.txt
 
 ```bash
 # 테스트용 설정 파일 생성 (운영 설정을 복사 후 테스트용으로 수정)
-cp config/settings.yaml config/settings.test.yaml
+cd config/settings.yaml
 ```
 
 `config/settings.test.yaml`을 테스트 환경에 맞게 수정:
@@ -291,8 +291,7 @@ def test_detect_anomalies():
 ```
 
 위 테스트는 Z-score / Deviation Ratio 계산과 임계값 비교 로직만 단순 검증합니다.  
-실제 `detect_anomalies` 구현은 `current_hour`를 이용해 **하루 진행률(progress)을 곱해 Baseline의 평균·표준편차를 현재 시점 기준으로 보정**한 뒤, 그 보정된 값과 관측값을 비교합니다.  
-시점 보정 설계의 배경은 `BASELINE_VS_HOURLY_TROUBLE.md` 문서를 참고하세요.
+현재 `detect_anomalies` 구현은 Baseline의 평균·표준편차(하루 총합 기준)를 기대값으로 사용해 관측값(오늘 누적)과 비교합니다.
 
 ## 🔗 통합 테스트
 

@@ -9,7 +9,12 @@
 import logging
 from logging.handlers import SysLogHandler
 from datetime import datetime
-from zoneinfo import ZoneInfo
+try:
+    # Python 3.9+
+    from zoneinfo import ZoneInfo
+except ImportError:  # pragma: no cover
+    # Python 3.8 (e.g., Ubuntu 20.04 기본 python3)
+    from backports.zoneinfo import ZoneInfo
 
 
 LOGGER_NAME = "billing_alert"
